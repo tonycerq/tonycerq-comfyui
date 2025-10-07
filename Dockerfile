@@ -1,3 +1,4 @@
+FROM tailscale/tailscale:latest AS tailscale
 FROM nvidia/cuda:12.8.0-base-ubuntu24.04 AS builder
 
 ARG PYTHON_VERSION="3.12"
@@ -54,6 +55,10 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+
+# Copy tailscale binaries
+COPY --from=tailscale /usr/local/bin/tailscaled /usr/local/bin/tailscaled
+COPY --from=tailscale /usr/local/bin/tailscale  /usr/local/bin/tailscale
 
 # Install uv package installer
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
