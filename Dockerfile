@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zoxide \
     nmap \
     eza \
+    lsof \
     && rm -rf /var/lib/apt/lists/*
 
 RUN add-apt-repository ppa:deadsnakes/ppa && \
@@ -84,14 +85,12 @@ RUN uv pip install --no-cache triton
 
 # Setup Jupyter configuration
 RUN jupyter notebook --generate-config && \
-    echo "c.NotebookApp.allow_root = True" >> /root/.jupyter/jupyter_notebook_config.py && \
-    echo "c.NotebookApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_notebook_config.py && \
-    echo "c.NotebookApp.token = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
-    echo "c.NotebookApp.password = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
-    echo "c.NotebookApp.allow_origin = '*'" >> /root/.jupyter/jupyter_notebook_config.py && \
-    echo "c.NotebookApp.allow_remote_access = True" >> /root/.jupyter/jupyter_notebook_config.py \
-    echo "c.NotebookApp.theme = JupyterLab Dark" >> /root/.jupyter/jupyter_notebook_config.py
-
+    echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.IdentityProvider.token = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.ServerApp.password = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.ServerApp.allow_origin = '*'" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.ServerApp.allow_remote_access = True" >> /root/.jupyter/jupyter_notebook_config.py
 
 # clear cache to free up space 
 RUN uv cache clean 
@@ -117,18 +116,17 @@ RUN ls -la
 
 COPY models_config.json /workspace
 
+# JupyterLab theme settings
+RUN mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
+COPY themes.jupyterlab-settings /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/
+
+
 # Make scripts executable
 RUN chmod +x *.sh
 
-
-
 # --- 2. ADD CUSTOM SHELL ALIASES AND GIT CONFIGURATIONS ---
 
-# 2a. Create the aliases script using a reliable, standalone RUN command for the heredoc.
-# Aliases are written to a script in /etc/profile.d/, which is sourced 
-# by interactive non-login shells (like when using 'docker exec -it bash').
-
-RUN cat <<EOF > /etc/profile.d/99-custom-aliases.sh
+RUN cat <<EOF > /root/.bash_aliases
 # Custom Shell Aliases
 alias btop='/usr/bin/btop --utf-force'
 alias n='/usr/bin/nvim'
@@ -157,22 +155,6 @@ alias rc='n ~/.bashrc'
 alias rca='n ~/.config/bash/aliases'
 alias rce='n ~/.config/bash/envs'
 EOF
-
-# 2b. Set permissions and apply Git configurations in a separate RUN command.
-RUN chmod +x /etc/profile.d/99-custom-aliases.sh && \
-    # Apply global Git configurations
-    git config --global alias.a 'add' && \
-    git config --global alias.ps 'push' && \
-    git config --global alias.pl 'pull' && \
-    git config --global alias.l 'log' && \
-    git config --global alias.c 'commit -m' && \
-    git config --global alias.s 'status' && \
-    git config --global alias.co 'checkout' && \
-    git config --global alias.b 'branch'
-
-
-RUN echo 'eval "$(zoxide init bash)"' >> ~/.bashrc
-
 
 # --- 3. FINALIZATION ---
 

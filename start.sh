@@ -320,7 +320,7 @@ fi
 echo "Starting services..."
 
 # Start Jupyter with GPU isolation
-CUDA_VISIBLE_DEVICES="" jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 --NotebookApp.token="" --NotebookApp.password="" --notebook-dir=/workspace &
+CUDA_VISIBLE_DEVICES="" jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 --IdentityProvider.token="" --ServerApp.allow_origin="'*'" --ServerApp.password="" --notebook-dir=/workspace &
 
 # Give other services time to initialize
 sleep 5
