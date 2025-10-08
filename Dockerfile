@@ -1,11 +1,8 @@
 FROM node:22-bookworm-slim AS node
-
-
-
 FROM tailscale/tailscale:latest AS tailscale
 FROM nvidia/cuda:12.8.0-base-ubuntu24.04 AS builder
 
-ARG PYTHON_VERSION="3.12"
+ARG PYTHON_VERSION="3.12" 
 ARG CONTAINER_TIMEZONE=UTC 
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -13,6 +10,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PATH="${PATH}:/root/.local/bin:/root/.cargo/bin"
+
+ENV JUPYTER_PORT=8888 HOST=0.0.0.0
 
 # --- 1. INSTALLATION AND CONFIGURATION ---
 
@@ -28,9 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libjpeg-dev zlib1g-dev libfreetype6-dev libpng-dev \
   && rm -rf /var/lib/apt/lists/*
 
-RUN add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get update --yes && \
-    apt-get install --yes --no-install-recommends python3-pip "python${PYTHON_VERSION}" "python${PYTHON_VERSION}-venv" && \
+RUN apt-get update --yes && \
+    apt-get install --yes --no-install-recommends "python${PYTHON_VERSION}" "python${PYTHON_VERSION}-venv" && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
@@ -41,16 +39,14 @@ COPY --from=tailscale /usr/local/bin/tailscaled /usr/local/bin/tailscaled
 COPY --from=tailscale /usr/local/bin/tailscale  /usr/local/bin/tailscale
 
 
-# Copy Node, npm, corepack from the node stage
-COPY --from=node /usr/local/bin/node /usr/local/bin/node
-COPY --from=node /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=node /usr/local/bin/npx /usr/local/bin/npx
-COPY --from=node /usr/local/bin/corepack /usr/local/bin/corepack
-COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+# ✅ Copy the entire /usr/local from node to preserve npm layout/symlinks
+# (this includes node, npm, npx, corepack, and node_modules)
+COPY --from=node /usr/local/ /usr/local/
 
 # Make npm’s shims visible
 ENV PATH="/usr/local/lib/node_modules/npm/bin/node-gyp-bin:/usr/local/bin:${PATH}"
 RUN corepack enable || true
+RUN node -v && npm -v && corepack -v
 
 # Install uv package installer
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -60,6 +56,13 @@ RUN python${PYTHON_VERSION} -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV UV_PREFER_BINARY=1 PIP_ONLY_BINARY="pycairo,rlpycairo" PIP_NO_BUILD_ISOLATION=1
 
+RUN python${PYTHON_VERSION} -V && pkg-config --modversion cairo
+
+
+# Disable npm audit and funding messages
+RUN npm config set audit false fund false update-notifier false --global || true
+# Get latest bun version and install it
+RUN npm install -g bun
 
 # Set working directory to root
 WORKDIR /
@@ -81,18 +84,18 @@ RUN uv pip install --no-cache \
 
 RUN uv pip install --no-cache triton
 
+
 # Setup Jupyter configuration
 RUN jupyter notebook --generate-config && \
     echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_notebook_config.py && \
-    echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.ServerApp.ip = '${HOST}'" >> /root/.jupyter/jupyter_notebook_config.py && \
     echo "c.IdentityProvider.token = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
     echo "c.ServerApp.password = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
     echo "c.ServerApp.allow_origin = '*'" >> /root/.jupyter/jupyter_notebook_config.py && \
     echo "c.ServerApp.allow_remote_access = True" >> /root/.jupyter/jupyter_notebook_config.py
 
 # clear cache to free up space 
-RUN uv cache clean 
-RUN apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+RUN uv cache clean && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 # Create workspace directory
 RUN mkdir -p /workspace
