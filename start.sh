@@ -1,351 +1,452 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# default environment variable
+set -euo pipefail
 
-export UPDATE_ON_START=${UPDATE_ON_START:-"false"}
-export MODELS_CONFIG_URL=${MODELS_CONFIG_URL:-"https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/models_config.json"}
-export SKIP_MODEL_DOWNLOAD=${SKIP_MODEL_DOWNLOAD:-"false"}
-export FORCE_MODEL_DOWNLOAD=${FORCE_MODEL_DOWNLOAD:-"false"}
-export LOG_PATH=${LOG_PATH:-"/notebooks/backend.log"}
-export USE_SAGE_ATTENTION=${USE_SAGE_ATTENTION:-"false"}
+# Default environment variables
+export UPDATE_ON_START="${UPDATE_ON_START:-false}"
+export MODELS_CONFIG_URL="${MODELS_CONFIG_URL:-https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/models_config.json}"
+export SKIP_MODEL_DOWNLOAD="${SKIP_MODEL_DOWNLOAD:-false}"
+export LOG_PATH="${LOG_PATH:-/notebooks/backend.log}"
+export USE_SAGE_ATTENTION="${USE_SAGE_ATTENTION:-false}"
 
 export TORCH_FORCE_WEIGHTS_ONLY_LOAD=1
 
-# Set strict error handling
-set -e
-
-# Function to check GPU availability with timeout
-check_gpu() {
-    local timeout=30
-    local interval=2
-    local elapsed=0
-
-    while [ $elapsed -lt $timeout ]; do
-        if nvidia-smi >/dev/null 2>&1; then
-            echo "GPU detected and ready"
-            return 0
-        fi
-        sleep $interval
-        elapsed=$((elapsed + interval))
-        echo "Waiting for GPU... ($elapsed/$timeout seconds)"
-    done
-
-    echo "WARNING: GPU not detected after $timeout seconds"
-    return 1
-}
-
-# Function to reset GPU state
-reset_gpu() {
-    echo "Resetting GPU state..."
-    nvidia-smi --gpu-reset 2>/dev/null || true
-    sleep 2
-}
-
-# Install uv if not already installed
-install_uv() {
-    if ! command -v uv &>/dev/null; then
-        echo "Installing uv package installer..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$HOME/.cargo/bin:$PATH"
-    else
-        echo "uv already installed, skipping..."
-    fi
-}
-
-# Ensure CUDA environment is properly set
+# CUDA environment configuration
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 export CUDA_LAUNCH_BLOCKING=1
 
-# Create necessary directories
-mkdir -p /workspace/logs
-mkdir -p /workspace/ComfyUI
+# Ensure uv will be on PATH when installed via the official script
+export PATH="${HOME}/.cargo/bin:${PATH}"
 
-# Create log file if it doesn't exist
-touch /workspace/logs/comfyui.log
+readonly WORKSPACE_DIR="/workspace"
+readonly COMFY_DIR="${WORKSPACE_DIR}/ComfyUI"
+readonly CUSTOM_NODES_DIR="${COMFY_DIR}/custom_nodes"
+readonly LOG_DIR="${WORKSPACE_DIR}/logs"
+readonly COMFY_LOG="${LOG_DIR}/comfyui.log"
+readonly MODELS_CONFIG_PATH="${WORKSPACE_DIR}/models_config.json"
+readonly LOG_VIEWER_WORKDIR="/notebooks"
+readonly LOG_VIEWER_SCRIPT="${LOG_VIEWER_WORKDIR}/log_viewer.py"
+readonly DOWNLOAD_MODELS_SCRIPT="${LOG_VIEWER_WORKDIR}/download_models.py"
+readonly COMFY_MANAGER_CONFIG_URL="https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini"
 
-# Clean up the log file to remove any duplicate lines
+readonly -a CUSTOM_NODE_REPOS=(
+  "https://github.com/ltdrdata/ComfyUI-Manager.git|ComfyUI-Manager"
+  "https://github.com/cubiq/ComfyUI_essentials.git|ComfyUI_essentials"
+  "https://github.com/kijai/ComfyUI-KJNodes.git|ComfyUI-KJNodes"
+  "https://github.com/city96/ComfyUI-GGUF.git|ComfyUI-GGUF"
+  "https://github.com/rgthree/rgthree-comfy.git|rgthree-comfy"
+  "https://github.com/justUmen/Bjornulf_custom_nodes.git|Bjornulf_custom_nodes"
+  "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|ComfyUI-Custom-Scripts"
+  "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git|ComfyUI-Frame-Interpolation"
+)
+
+HAS_INTERNET=0
+COMFY_PID=""
+
+log_info() {
+    local message=$1
+    printf '[INFO] %s\n' "$message" | tee -a "$COMFY_LOG"
+}
+
+log_warn() {
+    local message=$1
+    printf '[WARN] %s\n' "$message" | tee -a "$COMFY_LOG" >&2
+}
+
+log_error() {
+    local message=$1
+    printf '[ERROR] %s\n' "$message" | tee -a "$COMFY_LOG" >&2
+}
+
+log_section() {
+    local title=$1
+    log_info "=========================================================="
+    log_info " ${title}"
+    log_info "=========================================================="
+}
+
+setup_workspace() {
+    mkdir -p "$LOG_DIR"
+    touch "$COMFY_LOG"
+}
+
 clean_log_file() {
-    local log_file="/workspace/logs/comfyui.log"
-    if [ -f "$log_file" ] && [ -s "$log_file" ]; then
-        echo "Cleaning log file to remove duplicates..."
-        # Create a temporary file with unique lines only
-        awk '!seen[$0]++' "$log_file" >"${log_file}.tmp"
-        # Replace original with cleaned version
-        mv "${log_file}.tmp" "$log_file"
+    if [[ -s "$COMFY_LOG" ]]; then
+        local tmp_file
+        tmp_file=$(mktemp)
+        awk '!seen[$0]++' "$COMFY_LOG" >"$tmp_file"
+        mv "$tmp_file" "$COMFY_LOG"
     fi
 }
 
-# Clean the log file before starting the log viewer
-clean_log_file
+start_log_viewer() {
+    if [[ ! -f "$LOG_VIEWER_SCRIPT" ]]; then
+        log_warn "Log viewer script not found at $LOG_VIEWER_SCRIPT; skipping startup."
+        return
+    fi
 
-# Start log viewer early to monitor the installation process
-cd /notebooks
-# CUDA_VISIBLE_DEVICES="" python /log_viewer.py &
-CUDA_VISIBLE_DEVICES="" nohup python /notebooks/log_viewer.py &>$LOG_PATH &
-echo "Started log viewer on port 8189 - Monitor setup at http://localhost:8189"
-cd /
+    pushd "$LOG_VIEWER_WORKDIR" >/dev/null
+    CUDA_VISIBLE_DEVICES="" nohup python "$LOG_VIEWER_SCRIPT" &>"$LOG_PATH" &
+    popd >/dev/null
+    log_info "Started log viewer on port 8189 - monitor at http://localhost:8189"
+}
 
-# Install uv for faster package installation
-install_uv
-
-# Function to check internet connectivity
 check_internet() {
     local max_attempts=5
     local attempt=1
     local timeout=5
 
-    while [ $attempt -le $max_attempts ]; do
-        echo "Checking internet connectivity (attempt $attempt/$max_attempts)..."
-        if ping -c 1 -W $timeout 8.8.8.8 >/dev/null 2>&1; then
-            echo "Internet connection is available."
+    while (( attempt <= max_attempts )); do
+        log_info "Checking internet connectivity (${attempt}/${max_attempts})..."
+        if ping -c 1 -W "$timeout" 8.8.8.8 >/dev/null 2>&1; then
             return 0
         fi
-        echo "No internet connection. Waiting before retry..."
         sleep 10
-        attempt=$((attempt + 1))
+        ((attempt++))
     done
 
-    echo "WARNING: No internet connection after $max_attempts attempts."
     return 1
 }
 
-# Function to download config with retry
+install_uv() {
+    if command -v uv >/dev/null 2>&1; then
+        log_info "uv already installed."
+        return
+    fi
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_warn "uv not found and no internet connection; skipping installation."
+        return
+    fi
+
+    log_info "Installing uv package manager..."
+    if curl -fsSL https://astral.sh/uv/install.sh | sh; then
+        log_info "uv installation complete."
+    else
+        log_warn "uv installation failed; continuing without uv."
+        return
+    fi
+
+    if ! command -v uv >/dev/null 2>&1; then
+        log_warn "uv command not found after installation. Check PATH configuration."
+    fi
+}
+
 download_config() {
     local url=$1
     local output=$2
     local max_attempts=5
     local attempt=1
-    local timeout=30
 
-    while [ $attempt -le $max_attempts ]; do
-        echo "Downloading config (attempt $attempt/$max_attempts)..."
-        if wget --timeout=$timeout --tries=3 -O "$output" "$url" 2>/dev/null; then
-            echo "Successfully downloaded config file."
+    while (( attempt <= max_attempts )); do
+        log_info "Downloading config from ${url} (${attempt}/${max_attempts})..."
+        if curl -fsSL --connect-timeout 30 "$url" -o "$output"; then
             return 0
         fi
-        echo "Download failed. Waiting before retry..."
+        log_warn "Config download failed on attempt ${attempt}. Retrying in 10 seconds..."
         sleep 10
-        attempt=$((attempt + 1))
+        ((attempt++))
     done
 
-    echo "WARNING: Failed to download config after $max_attempts attempts."
     return 1
 }
 
-# Check for models_config.json and download it first thing
-CONFIG_FILE="/workspace/models_config.json"
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Creating models_config.json..." | tee -a /workspace/logs/comfyui.log
-    if [ -n "$MODELS_CONFIG_URL" ]; then
-        if ! download_config "$MODELS_CONFIG_URL" "$CONFIG_FILE"; then
-            echo "Failed to download from URL. Creating default config..." | tee -a /workspace/logs/comfyui.log
-            echo '{
-                "checkpoints": [],
-                "vae": [],
-                "unet": [],
-                "diffusion_models": [],
-                "text_encoders": [],
-                "loras": [],
-                "upscale_models": [],
-                "clip": [],
-                "controlnet": [],
-                "clip_vision": [],
-                "ipadapter": [],
-                "style_models": []
-            }' >"$CONFIG_FILE"
-        fi
-    else
-        echo "No MODELS_CONFIG_URL provided. Creating default configuration..." | tee -a /workspace/logs/comfyui.log
-        echo '{
-            "checkpoints": [],
-            "vae": [],
-            "unet": [],
-            "diffusion_models": [],
-            "text_encoders": [],
-            "loras": [],
-            "upscale_models": [],
-            "clip": [],
-            "controlnet": [],
-            "clip_vision": [],
-            "ipadapter": [],
-            "style_models": []
-        }' >"$CONFIG_FILE"
+ensure_models_config() {
+    if [[ -f "$MODELS_CONFIG_PATH" ]]; then
+        log_info "models_config.json already present; reusing existing file."
+        return
     fi
-else
-    echo "models_config.json already exists, using existing file" | tee -a /workspace/logs/comfyui.log
-fi
 
-# Create dirs and download ComfyUI if it doesn't exist
-if [ ! -e "/workspace/ComfyUI/main.py" ]; then
-    echo "ComfyUI not found or incomplete, installing..." | tee -a /workspace/logs/comfyui.log
+    log_info "models_config.json missing; preparing configuration..."
+    if [[ -n "$MODELS_CONFIG_URL" && "$HAS_INTERNET" -eq 1 ]]; then
+        if download_config "$MODELS_CONFIG_URL" "$MODELS_CONFIG_PATH"; then
+            log_info "Downloaded models_config.json from remote source."
+            return
+        fi
+        log_warn "Failed to download models_config.json; falling back to default template."
+    elif [[ -n "$MODELS_CONFIG_URL" ]]; then
+        log_warn "MODELS_CONFIG_URL provided but no internet connection; using default template."
+    fi
 
-    # Remove incomplete directory if it exists
-    rm -rf /workspace/ComfyUI
-
-    # Create workspace and log directories
-    mkdir -p /workspace/logs
-
-    # Create log file
-    touch /workspace/logs/comfyui.log
-
-    echo "Cloning ComfyUI..." | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/comfyanonymous/ComfyUI /workspace/ComfyUI 2>&1 | tee -a /workspace/logs/comfyui.log
-
-    # Install dependencies
-    cd /workspace/ComfyUI
-    echo "Installing PyTorch dependencies..." | tee -a /workspace/logs/comfyui.log
-    uv pip install --no-cache torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 2>&1 | tee -a /workspace/logs/comfyui.log
-    echo "Installing ComfyUI requirements..." | tee -a /workspace/logs/comfyui.log
-    uv pip install --no-cache -r requirements.txt 2>&1 | tee -a /workspace/logs/comfyui.log
-
-    # Install SageAttention 2.2.0 from prebuilt wheel (no compilation needed)
-    echo "Installing SageAttention 2.2.0 from prebuilt wheel..." | tee -a /workspace/logs/comfyui.log
-    uv pip install https://huggingface.co/Kijai/PrecompiledWheels/resolve/main/sageattention-2.2.0-cp312-cp312-linux_x86_64.whl 2>&1 | tee -a /workspace/logs/comfyui.log
-    echo "SageAttention 2.2.0 installation complete" | tee -a /workspace/logs/comfyui.log
-
-    cd /workspace/ComfyUI
-
-    # Create model directories
-    mkdir -p /workspace/ComfyUI/models/{checkpoints,vae,unet,diffusion_models,text_encoders,loras,upscale_models,clip,controlnet,clip_vision,ipadapter,style_models}
-    mkdir -p /workspace/ComfyUI/custom_nodes
-    mkdir -p /workspace/ComfyUI/input
-    mkdir -p /workspace/ComfyUI/output
-
-    # Clone custom nodes
-    mkdir -p /workspace/ComfyUI/custom_nodes
-    cd /workspace/ComfyUI/custom_nodes
-
-    echo "Cloning custom nodes..." | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-Manager | tee -a /workspace/logs/comfyui.log
-    #git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Impact-Pack.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-Impact-Pack | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/cubiq/ComfyUI_essentials.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI_essentials | tee -a /workspace/logs/comfyui.log
-    #git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-Inspire-Pack | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/Fannovel16/comfyui_controlnet_aux.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh comfyui_controlnet_aux | tee -a /workspace/logs/comfyui.log
-    #git clone --depth=1 https://github.com/nicofdga/DZ-FaceDetailer.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh DZ-FaceDetailer | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/cubiq/ComfyUI_IPAdapter_plus.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI_IPAdapter_plus | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git --recursive 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI_UltimateSDUpscale | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-VideoHelperSuite | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/Acly/comfyui-inpaint-nodes.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh comfyui-inpaint-nodes | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-KJNodes | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/city96/ComfyUI-GGUF.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-GGUF | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/rgthree/rgthree-comfy.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh rgthree-comfy | tee -a /workspace/logs/comfyui.log
-    #git clone --depth=1 https://github.com/AlekPet/ComfyUI_Custom_Nodes_AlekPet.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI_Custom_Nodes_AlekPet | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/justUmen/Bjornulf_custom_nodes.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh Bjornulf_custom_nodes | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-Custom-Scripts | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-Frame-Interpolation | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-SeedVR2_VideoUpscaler | tee -a /workspace/logs/comfyui.log
-    #git clone --depth=1 https://github.com/ShmuelRonen/ComfyUI-VideoUpscale_WithModel.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-VideoUpscale_WithModel | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-WanVideoWrapper | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/chflame163/ComfyUI_LayerStyle.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI_LayerStyle | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/kijai/ComfyUI-MelBandRoFormer.git 2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-MelBandRoFormer | tee -a /workspace/logs/comfyui.log
-    git clone --depth=1 https://github.com/kijai/ComfyUI-segment-anything-2.git  2>&1 | tee -a /workspace/logs/comfyui.log && du -sh ComfyUI-segment-anything-2 | tee -a /workspace/logs/comfyui.log
-
-    echo "Total size of custom nodes:" | tee -a /workspace/logs/comfyui.log && du -sh . | tee -a /workspace/logs/comfyui.log
-
-    # Install custom nodes requirements
-    echo "Installing custom node requirements..." | tee -a /workspace/logs/comfyui.log
-    find . -name "requirements.txt" -exec uv pip install --no-cache -r {} \; 2>&1 | tee -a /workspace/logs/comfyui.log
-
-    mkdir -p /workspace/ComfyUI/user/default/ComfyUI-Manager
-    wget https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini -O /workspace/ComfyUI/user/default/ComfyUI-Manager/config.ini 2>&1 | tee -a /workspace/logs/comfyui.log
-
-    cd /workspace
-else
-    echo "ComfyUI already exists, skipping clone" | tee -a /workspace/logs/comfyui.log
-    # Create ComfyUI model directories if they don't exist yet
-    echo "Ensuring ComfyUI model directories exist..." | tee -a /workspace/logs/comfyui.log
-    mkdir -p /workspace/ComfyUI/models/{checkpoints,vae,unet,diffusion_models,text_encoders,loras,upscale_models,clip,controlnet,clip_vision,ipadapter,style_models}
-    mkdir -p /workspace/ComfyUI/custom_nodes
-    mkdir -p /workspace/ComfyUI/input
-    mkdir -p /workspace/ComfyUI/output
-
-    
-    # Install Dependencies
-    cd /workspace/ComfyUI
-    echo "Installing PyTorch dependencies..." | tee -a /workspace/logs/comfyui.log
-    uv pip install --no-cache torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 2>&1 | tee -a /workspace/logs/comfyui.log
-    echo "Installing ComfyUI requirements..." | tee -a /workspace/logs/comfyui.log
-    uv pip install --no-cache -r requirements.txt 2>&1 | tee -a /workspace/logs/comfyui.log
-
-    # Install SageAttention 2.2.0 from prebuilt wheel (no compilation needed)
-    echo "Installing SageAttention 2.2.0 from prebuilt wheel..." | tee -a /workspace/logs/comfyui.log
-    uv pip install https://huggingface.co/Kijai/PrecompiledWheels/resolve/main/sageattention-2.2.0-cp312-cp312-linux_x86_64.whl 2>&1 | tee -a /workspace/logs/comfyui.log
-    echo "SageAttention 2.2.0 installation complete" | tee -a /workspace/logs/comfyui.log
-
-    cd /workspace/ComfyUI
-
-    # Install Custom Nodes Dependencies
-    cd /workspace/ComfyUI/custom_nodes
-    echo "Installing custom node requirements..." | tee -a /workspace/logs/comfyui.log
-    find . -name "requirements.txt" -exec uv pip install --no-cache -r {} \; 2>&1 | tee -a /workspace/logs/comfyui.log
-fi
-
-# Create log file if it doesn't exist
-touch /workspace/logs/comfyui.log
-
-# Function to check if a model exists
-check_model() {
-    local url=$1
-    local filename=$(basename "$url")
-    # Search for the file in all model directories
-    find /workspace/ComfyUI/models -type f -name "$filename" | grep -q .
-    return $?
+    cat <<'EOF' >"$MODELS_CONFIG_PATH"
+{
+    "checkpoints": [],
+    "vae": [],
+    "diffusion_models": [],
+    "text_encoders": [],
+    "loras": [],
+    "upscale_models": [],
+    "clip": [],
+    "controlnet": [],
+    "clip_vision": [],
+    "ipadapter": [],
+    "style_models": []
+}
+EOF
 }
 
-# Initialize GPU - Do this before downloading models to ensure GPU is ready
-echo "Initializing GPU..."
-if ! check_gpu; then
-    echo "WARNING: GPU initialization failed. Services may not function properly."
-else
-    reset_gpu
-fi
-
-# Check if models from config exist
-if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
-    echo "Checking for missing models..." | tee -a /workspace/logs/comfyui.log
-    if python /utils/getInstalledModels.py --check-missing "$CONFIG_FILE"; then
-        echo "All required models present..." | tee -a /workspace/logs/comfyui.log
-    elif [ "$SKIP_MODEL_DOWNLOAD" != "true" ]; then
-        echo "Some required models are missing. Downloading models..." | tee -a /workspace/logs/comfyui.log
-        python /notebooks/download_models.py 2>&1 | tee -a $LOG_PATH
-    else
-        echo "Models missing but download skipped..." | tee -a /workspace/logs/comfyui.log
+check_gpu() {
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        log_warn "nvidia-smi not available; skipping GPU health check."
+        return 1
     fi
-else
-    echo "No valid models_config.json found. Skipping model checks..."
-fi
 
-# Start services with proper sequencing
-echo "Starting services..."
+    local timeout=30
+    local interval=2
+    local elapsed=0
 
-# Start Jupyter with GPU isolation
-CUDA_VISIBLE_DEVICES="" jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 --NotebookApp.token="" --NotebookApp.password="" --notebook-dir=/workspace &
+    while (( elapsed < timeout )); do
+        if nvidia-smi >/dev/null 2>&1; then
+            log_info "GPU detected and ready."
+            return 0
+        fi
+        sleep "$interval"
+        elapsed=$((elapsed + interval))
+        log_info "Waiting for GPU... (${elapsed}/${timeout} seconds)"
+    done
 
-# Give other services time to initialize
-sleep 5
+    log_warn "GPU not detected after ${timeout} seconds."
+    return 1
+}
 
-# Start ComfyUI with full GPU access
-cd /workspace/ComfyUI
+reset_gpu() {
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        return
+    fi
 
+    log_info "Resetting GPU state..."
+    nvidia-smi --gpu-reset 2>/dev/null || true
+    sleep 2
+}
 
-# Clear any existing CUDA cache
-python -c "import torch; torch.cuda.empty_cache()" || true
-# Add a clear marker in the log file
-echo "====================================================================" | tee -a /workspace/logs/comfyui.log
-echo "============ ComfyUI STARTING $(date) ============" | tee -a /workspace/logs/comfyui.log
-echo "====================================================================" | tee -a /workspace/logs/comfyui.log
-# Start ComfyUI with proper logging
-echo "Starting ComfyUI on port 8188..." | tee -a /workspace/logs/comfyui.log
-# Use unbuffer to ensure output is line-buffered for better real-time logging
-if [ "$USE_SAGE_ATTENTION" = "true" ]; then
-    python main.py --listen 0.0.0.0 --use-sage-attention --port 8188 2>&1 | tee -a /workspace/logs/comfyui.log &
-else
-    python main.py --listen 0.0.0.0 --port 8188 2>&1 | tee -a /workspace/logs/comfyui.log &
-fi
-# Record the PID of the ComfyUI process
-COMFY_PID=$!
-echo "ComfyUI started with PID: $COMFY_PID" | tee -a /workspace/logs/comfyui.log
+ensure_comfyui_repo() {
+    if [[ -f "${COMFY_DIR}/main.py" ]]; then
+        log_info "ComfyUI already present; skipping clone."
+        return
+    fi
 
-# Wait for all processes
-wait
+    log_info "ComfyUI not found or incomplete; initializing fresh installation."
+    if [[ -d "$COMFY_DIR" ]]; then
+        log_warn "Removing existing ComfyUI directory before cloning."
+        rm -rf "$COMFY_DIR"
+    fi
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_error "Internet connection is required to clone ComfyUI. Aborting."
+        exit 1
+    fi
+
+    log_info "Cloning ComfyUI repository..."
+    git clone --depth=1 https://github.com/comfyanonymous/ComfyUI "$COMFY_DIR" 2>&1 | tee -a "$COMFY_LOG"
+}
+
+ensure_comfyui_structure() {
+    mkdir -p "${COMFY_DIR}/models/"{checkpoints,vae,unet,diffusion_models,text_encoders,loras,upscale_models,clip,controlnet,clip_vision,ipadapter,style_models}
+    mkdir -p "$CUSTOM_NODES_DIR" "${COMFY_DIR}/input" "${COMFY_DIR}/output" "${COMFY_DIR}/user/default/ComfyUI-Manager"
+}
+
+install_comfyui_dependencies() {
+    if ! command -v uv >/dev/null 2>&1; then
+        log_warn "uv not available; skipping ComfyUI dependency installation."
+        return
+    fi
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_warn "No internet connection; skipping ComfyUI dependency installation."
+        return
+    fi
+
+    if [[ ! -f "${COMFY_DIR}/requirements.txt" ]]; then
+        log_warn "ComfyUI requirements.txt not found; skipping dependency installation."
+        return
+    fi
+
+    pushd "$COMFY_DIR" >/dev/null
+    log_info "Installing PyTorch dependencies (CUDA 12.8 wheels)..."
+    uv pip install --no-cache torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 2>&1 | tee -a "$COMFY_LOG"
+
+    log_info "Installing ComfyUI Python requirements..."
+    uv pip install --no-cache -r requirements.txt 2>&1 | tee -a "$COMFY_LOG"
+
+    log_info "Installing SageAttention 2.2.0 prebuilt wheel..."
+    uv pip install https://huggingface.co/Kijai/PrecompiledWheels/resolve/main/sageattention-2.2.0-cp312-cp312-linux_x86_64.whl 2>&1 | tee -a "$COMFY_LOG"
+    popd >/dev/null
+}
+
+ensure_comfyui_manager_config() {
+    local config_path="${COMFY_DIR}/user/default/ComfyUI-Manager/config.ini"
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_warn "Skipping ComfyUI Manager configuration download (offline mode)."
+        return
+    fi
+
+    log_info "Updating ComfyUI Manager configuration..."
+    if curl -fsSL "$COMFY_MANAGER_CONFIG_URL" -o "$config_path"; then
+        log_info "ComfyUI Manager configuration updated."
+    else
+        log_warn "Failed to download ComfyUI Manager configuration."
+    fi
+}
+
+install_custom_nodes_dependencies() {
+    if ! command -v uv >/dev/null 2>&1; then
+        log_warn "uv not available; skipping custom node dependency installation."
+        return
+    fi
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_warn "No internet connection; skipping custom node dependency installation."
+        return
+    fi
+
+    if [[ ! -d "$CUSTOM_NODES_DIR" ]]; then
+        return
+    fi
+
+    log_info "Installing custom node requirements..."
+    find "$CUSTOM_NODES_DIR" -name "requirements.txt" -print0 | while IFS= read -r -d '' req_file; do
+        log_info "Installing dependencies from ${req_file}..."
+        uv pip install --no-cache -r "$req_file" 2>&1 | tee -a "$COMFY_LOG"
+    done
+}
+
+sync_custom_nodes() {
+    ensure_comfyui_structure
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_warn "Skipping custom node clones (offline mode)."
+        return
+    fi
+
+    mkdir -p "$CUSTOM_NODES_DIR"
+    pushd "$CUSTOM_NODES_DIR" >/dev/null
+    log_section "Download ComfyUI Nodes"
+
+    for entry in "${CUSTOM_NODE_REPOS[@]}"; do
+        local repo=${entry%%|*}
+        local target_dir=${entry##*|}
+        if [[ -d "$target_dir/.git" ]]; then
+            log_info "Custom node ${target_dir} already present; skipping clone."
+            continue
+        fi
+
+        log_info "Cloning ${target_dir}..."
+        git clone --depth=1 "$repo" "$target_dir" 2>&1 | tee -a "$COMFY_LOG"
+        du -sh "$target_dir" 2>/dev/null | tee -a "$COMFY_LOG" || true
+    done
+
+    if [[ -d "$CUSTOM_NODES_DIR" ]]; then
+        log_info "Total size of custom nodes:"
+        du -sh "$CUSTOM_NODES_DIR" 2>/dev/null | tee -a "$COMFY_LOG" || true
+    fi
+
+    popd >/dev/null
+
+    install_custom_nodes_dependencies
+    ensure_comfyui_manager_config
+}
+
+initialize_gpu() {
+    log_info "Initializing GPU..."
+    if check_gpu; then
+        reset_gpu
+    else
+        log_warn "GPU initialization failed. Services may not function properly."
+    fi
+}
+
+sync_models() {
+    if [[ ! -f "$MODELS_CONFIG_PATH" ]]; then
+        log_warn "models_config.json not found; skipping model synchronization."
+        return
+    fi
+
+    log_info "Checking for missing models..."
+    if python /utils/getInstalledModels.py --check-missing "$MODELS_CONFIG_PATH" | tee -a "$COMFY_LOG"; then
+        log_info "All required models are present."
+        return
+    fi
+
+    if [[ "$SKIP_MODEL_DOWNLOAD" == "true" ]]; then
+        log_warn "Models missing but downloads are disabled via SKIP_MODEL_DOWNLOAD."
+        return
+    fi
+
+    if [[ "$HAS_INTERNET" -eq 0 ]]; then
+        log_warn "Models are missing and no internet connection is available to download them."
+        return
+    fi
+
+    if [[ ! -f "$DOWNLOAD_MODELS_SCRIPT" ]]; then
+        log_error "download_models.py not found at $DOWNLOAD_MODELS_SCRIPT; cannot download missing models."
+        return
+    fi
+
+    log_info "Downloading missing models..."
+    python "$DOWNLOAD_MODELS_SCRIPT" 2>&1 | tee -a "$LOG_PATH"
+}
+
+start_services() {
+    log_info "Starting services..."
+
+    CUDA_VISIBLE_DEVICES="" jupyter lab \
+        --allow-root \
+        --no-browser \
+        --ip=0.0.0.0 \
+        --port=8888 \
+        --IdentityProvider.token="" \
+        --ServerApp.allow_origin="'*'" \
+        --ServerApp.password="" \
+        --notebook-dir=/workspace &
+    local jupyter_pid=$!
+    log_info "Jupyter Lab started with PID: ${jupyter_pid}"
+
+    sleep 5
+
+    pushd "$COMFY_DIR" >/dev/null
+    python -c "import torch; torch.cuda.empty_cache()" || true
+
+    log_info "===================================================================="
+    log_info "============ ComfyUI STARTING $(date) ============"
+    log_info "===================================================================="
+    log_info "Starting ComfyUI on port 8188..."
+
+    if [[ "$USE_SAGE_ATTENTION" == "true" ]]; then
+        python main.py --listen 0.0.0.0 --use-sage-attention --port 8188 2>&1 | tee -a "$COMFY_LOG" &
+    else
+        python main.py --listen 0.0.0.0 --port 8188 2>&1 | tee -a "$COMFY_LOG" &
+    fi
+
+    COMFY_PID=$!
+    log_info "ComfyUI started with PID: ${COMFY_PID}"
+    popd >/dev/null
+}
+
+main() {
+    setup_workspace
+    clean_log_file
+    start_log_viewer
+
+    if check_internet; then
+        HAS_INTERNET=1
+        log_info "Internet connection is available."
+    else
+        log_warn "No internet connection detected after retries; continuing in offline mode."
+    fi
+
+    install_uv
+    ensure_models_config
+    ensure_comfyui_repo
+    ensure_comfyui_structure
+    sync_custom_nodes
+    install_comfyui_dependencies
+    initialize_gpu
+    sync_models
+    start_services
+
+    wait
+}
+
+main "$@"

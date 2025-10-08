@@ -45,6 +45,4 @@ ComfyUI/input/*
 .DS_Store
 Thumbs.db 
 build_and_run.sh
-deploy.sh
-
 .env
