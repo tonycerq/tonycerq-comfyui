@@ -1,9 +1,9 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `start.sh` orchestrates container startup: it validates GPU access, hydrates `models_config.json`, and launches the log viewer on port 8189.
+- `start.sh` orchestrates container startup: it validates GPU access, hydrates `models_config.json`, and launches the dashboard on port 8189.
 - Python sources live in `utils/`, `workers/`, `constants/`, and `dto/` for log formatting, download orchestration, and DTOs.
-- Web assets supporting the log dashboard are under `templates/` and `static/`.
+- Web assets supporting the dashboard live under `web/templates/` and `web/static/`.
 - Docker assets (`Dockerfile`, `build_and_run.sh`, `deploy.sh`) define how ComfyUI ships; `models_config*.json` files drive downloads.
 
 ## Build, Test, and Development Commands

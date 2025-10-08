@@ -8,7 +8,7 @@ def get_current_logs():
     """Get the current logs from the buffer with Docker-style formatting"""
     with log_lock:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        header = f"<div class='log-line'><span class='log-timestamp'>{timestamp}</span><span class='log-info'>Log Viewer - Last {len(log_buffer)} lines</span></div>\n"
+        header = f"<div class='log-line'><span class='log-timestamp'>{timestamp}</span><span class='log-info'>Dashboard - Last {len(log_buffer)} lines</span></div>\n"
 
         # Return log buffer with Docker-style formatting
         if log_buffer:

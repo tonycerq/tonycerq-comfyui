@@ -24,9 +24,10 @@ readonly CUSTOM_NODES_DIR="${COMFY_DIR}/custom_nodes"
 readonly LOG_DIR="${WORKSPACE_DIR}/logs"
 readonly COMFY_LOG="${LOG_DIR}/comfyui.log"
 readonly MODELS_CONFIG_PATH="${WORKSPACE_DIR}/models_config.json"
-readonly LOG_VIEWER_WORKDIR="/notebooks"
-readonly LOG_VIEWER_SCRIPT="${LOG_VIEWER_WORKDIR}/log_viewer.py"
-readonly DOWNLOAD_MODELS_SCRIPT="${LOG_VIEWER_WORKDIR}/download_models.py"
+readonly DASHBOARD_WORKDIR="/notebooks"
+readonly DASHBOARD_SCRIPT_PATH="${DASHBOARD_WORKDIR}/web/dashboard.py"
+readonly DASHBOARD_MODULE="web.dashboard"
+readonly DOWNLOAD_MODELS_SCRIPT="${DASHBOARD_WORKDIR}/download_models.py"
 readonly COMFY_MANAGER_CONFIG_URL="https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini"
 
 readonly -a CUSTOM_NODE_REPOS=(
@@ -79,16 +80,16 @@ clean_log_file() {
     fi
 }
 
-start_log_viewer() {
-    if [[ ! -f "$LOG_VIEWER_SCRIPT" ]]; then
-        log_warn "Log viewer script not found at $LOG_VIEWER_SCRIPT; skipping startup."
+start_dashboard() {
+    if [[ ! -f "$DASHBOARD_SCRIPT_PATH" ]]; then
+        log_warn "Dashboard script not found at $DASHBOARD_SCRIPT_PATH; skipping startup."
         return
     fi
 
-    pushd "$LOG_VIEWER_WORKDIR" >/dev/null
-    CUDA_VISIBLE_DEVICES="" nohup python "$LOG_VIEWER_SCRIPT" &>"$LOG_PATH" &
+    pushd "$DASHBOARD_WORKDIR" >/dev/null
+    CUDA_VISIBLE_DEVICES="" nohup python -m "$DASHBOARD_MODULE" &>"$LOG_PATH" &
     popd >/dev/null
-    log_info "Started log viewer on port 8189 - monitor at http://localhost:8189"
+    log_info "Started dashboard on port 8189 - monitor at http://localhost:8189"
 }
 
 check_internet() {
@@ -439,7 +440,7 @@ start_services() {
 main() {
     setup_workspace
     clean_log_file
-    start_log_viewer
+    start_dashboard
 
     if check_internet; then
         HAS_INTERNET=1

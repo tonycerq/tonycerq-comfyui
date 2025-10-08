@@ -5,6 +5,7 @@ import os
 import threading
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
 import uvicorn
 from fastapi import (
@@ -31,19 +32,23 @@ from workers.download_file import (
 )
 from workers.tailLogsFile import tail_log_file, tlf_worker
 
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATE_DIR = BASE_DIR / "templates"
+
 # Initialize FastAPI with disable docs url (swagger and redoc)
 app = FastAPI(
-    title="ComfyUI Log Viewer",
-    description="ComfyUI Runpod Log Viewer and Model Downloader",
+    title="ComfyUI Dashboard",
+    description="ComfyUI dashboard for logs and model management",
     docs_url=None,
     redoc_url=None,
 )
 
 # using static file to serve css,js and images
-app.mount("/static", StaticFiles(directory="./static"), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # using template path instead of HTML string
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 
 def create_output_zip():
@@ -202,7 +207,7 @@ async def index(request: Request):
 
     # return template instead of html string
     return templates.TemplateResponse(
-        "web.html",
+        "dashboard.html",
         {
             "request": request,
             "logs": logs,
@@ -218,7 +223,7 @@ async def index(request: Request):
 
 if __name__ == "__main__":
 
-    print("Starting log monitoring thread...")
+    print("Starting dashboard log monitoring thread...")
 
     # using new event loop + thread to handle read logs like tail -f (always read latest log)
     loop = asyncio.new_event_loop()
@@ -233,6 +238,6 @@ if __name__ == "__main__":
     )
     log_thread.start()
 
-    print("Starting FastAPI log viewer on port 8189...")
+    print("Starting FastAPI dashboard on port 8189...")
 
     uvicorn.run(app, host="0.0.0.0", port=8189, log_level="info")
