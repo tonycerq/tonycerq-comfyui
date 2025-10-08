@@ -44,6 +44,7 @@ readonly -a CUSTOM_NODE_REPOS=(
   "https://github.com/rgthree/rgthree-comfy.git|rgthree-comfy"
   "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|ComfyUI-Custom-Scripts"
   "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git|ComfyUI-Frame-Interpolation"
+  "https://github.com/MOVZX/ComfyUI-PromptPresets.git|ComfyUI-PromptPresets"
 )
 
 HAS_INTERNET=0
