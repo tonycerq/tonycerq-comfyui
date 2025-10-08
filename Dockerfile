@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1-mesa-dev \
     libglib2.0-0 \
+    libglib2.0-dev \
+    libffi-dev \
     wget \
     ffmpeg \
     aria2 \
@@ -44,6 +46,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     neovim \
     zoxide \
     nmap \
+    pkg-config \
+    libcairo2-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libfreetype6-dev \
+    libpng-dev \
     eza \
     lsof \
     && rm -rf /var/lib/apt/lists/*

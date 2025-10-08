@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Default environment variables
 export MODELS_CONFIG_URL="${MODELS_CONFIG_URL:-https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/models_config.json}"
-export SKIP_CUSTOM_NODES_DOWNLOAD="${SKIP_CUSTOM_NODES_DOWNLOAD:-true}"
+export SKIP_CUSTOM_NODES_DOWNLOAD="${SKIP_CUSTOM_NODES_DOWNLOAD:-false}"
 export SKIP_MODEL_DOWNLOAD="${SKIP_MODEL_DOWNLOAD:-false}"
 export LOG_PATH="${LOG_PATH:-/notebooks/backend.log}"
 export USE_SAGE_ATTENTION="${USE_SAGE_ATTENTION:-false}"
