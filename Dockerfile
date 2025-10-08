@@ -1,3 +1,7 @@
+FROM node:22-bookworm-slim AS node
+
+
+
 FROM tailscale/tailscale:latest AS tailscale
 FROM nvidia/cuda:12.8.0-base-ubuntu24.04 AS builder
 
@@ -12,49 +16,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # --- 1. INSTALLATION AND CONFIGURATION ---
 
-
 # Install system dependencies including CUDA development tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
-    git \
-    build-essential \
-    libgl1-mesa-dev \
-    libglib2.0-0 \
-    libglib2.0-dev \
-    libffi-dev \
-    wget \
-    ffmpeg \
-    aria2 \
-    rsync \
-    curl \
-    ca-certificates \
-    fzf \
-    ripgrep \
-    fd-find \
-    bat \
-    nvtop \
-    btop \
-    jq \
-    httpie \
-    curl \
-    wget \
-    tree \
-    gnupg \
-    build-essential \
-    libgl1 \
-    libglib2.0-0 \
-    neovim \
-    zoxide \
-    nmap \
-    pkg-config \
-    libcairo2-dev \
-    libjpeg-dev \
-    zlib1g-dev \
-    libfreetype6-dev \
-    libpng-dev \
-    eza \
-    lsof \
-    && rm -rf /var/lib/apt/lists/*
+  software-properties-common git build-essential \
+  libgl1-mesa-dev libgl1 \
+  libglib2.0-0 libglib2.0-dev libffi-dev \
+  wget curl ffmpeg aria2 rsync ca-certificates \
+  fzf ripgrep fd-find bat nvtop btop jq httpie tree gnupg \
+  neovim zoxide nmap eza lsof \
+  pkg-config libcairo2-dev meson ninja-build \
+  libjpeg-dev zlib1g-dev libfreetype6-dev libpng-dev \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update --yes && \
@@ -68,12 +40,26 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
 COPY --from=tailscale /usr/local/bin/tailscaled /usr/local/bin/tailscaled
 COPY --from=tailscale /usr/local/bin/tailscale  /usr/local/bin/tailscale
 
+
+# Copy Node, npm, corepack from the node stage
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=node /usr/local/bin/npx /usr/local/bin/npx
+COPY --from=node /usr/local/bin/corepack /usr/local/bin/corepack
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+# Make npm’s shims visible
+ENV PATH="/usr/local/lib/node_modules/npm/bin/node-gyp-bin:/usr/local/bin:${PATH}"
+RUN corepack enable || true
+
 # Install uv package installer
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Create and activate virtual environment
 RUN python${PYTHON_VERSION} -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV UV_PREFER_BINARY=1 PIP_ONLY_BINARY="pycairo,rlpycairo" PIP_NO_BUILD_ISOLATION=1
+
 
 # Set working directory to root
 WORKDIR /
@@ -82,7 +68,6 @@ WORKDIR /
 RUN uv pip install --no-cache \
     jupyter \
     jupyterlab \
-    nodejs \
     requests \
     fastapi \
     uvicorn \
