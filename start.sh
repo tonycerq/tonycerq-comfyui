@@ -15,8 +15,14 @@ export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 export CUDA_LAUNCH_BLOCKING=1
 
+
+export UV_PREFER_BINARY="${UV_PREFER_BINARY:-1}"
+export PIP_ONLY_BINARY="${PIP_ONLY_BINARY:-pycairo,rlpycairo}"
+export PIP_NO_BUILD_ISOLATION="${PIP_NO_BUILD_ISOLATION:-1}"
+
 # Ensure uv will be on PATH when installed via the official script
-export PATH="${HOME}/.cargo/bin:${PATH}"
+export PATH="/opt/venv/bin:${HOME}/.cargo/bin:${PATH}"
+
 
 readonly WORKSPACE_DIR="/workspace"
 readonly COMFY_DIR="${WORKSPACE_DIR}/comfyui"
@@ -36,7 +42,6 @@ readonly -a CUSTOM_NODE_REPOS=(
   "https://github.com/kijai/ComfyUI-KJNodes.git|ComfyUI-KJNodes"
   "https://github.com/city96/ComfyUI-GGUF.git|ComfyUI-GGUF"
   "https://github.com/rgthree/rgthree-comfy.git|rgthree-comfy"
-  "https://github.com/justUmen/Bjornulf_custom_nodes.git|Bjornulf_custom_nodes"
   "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|ComfyUI-Custom-Scripts"
   "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git|ComfyUI-Frame-Interpolation"
 )
@@ -88,6 +93,7 @@ start_dashboard() {
 
     pushd "$DASHBOARD_WORKDIR" >/dev/null
     CUDA_VISIBLE_DEVICES="" nohup python -m "$DASHBOARD_MODULE" &>"$LOG_PATH" &
+
     popd >/dev/null
     log_info "Started dashboard on port 8189 - monitor at http://localhost:8189"
 }
@@ -101,7 +107,7 @@ check_internet() {
     if [[ -n "$MODELS_CONFIG_URL" ]]; then
         targets+=("$MODELS_CONFIG_URL")
     fi
-    targets+=("https://raw.githubusercontent.com" "https://example.com" "https://1.1.1.1")
+    targets+=("https://raw.githubusercontent.com")
 
     while (( attempt <= max_attempts )); do
         log_info "Checking internet connectivity (${attempt}/${max_attempts})..."
@@ -271,14 +277,27 @@ install_comfyui_dependencies() {
     fi
 
     pushd "$COMFY_DIR" >/dev/null
+    # log_info "Installing PyTorch dependencies (CUDA 12.8 wheels)..."
+    # uv pip install --no-cache torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 2>&1 | tee -a "$COMFY_LOG"
+
     log_info "Installing PyTorch dependencies (CUDA 12.8 wheels)..."
-    uv pip install --no-cache torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 2>&1 | tee -a "$COMFY_LOG"
+    UV_PREFER_BINARY=1 PIP_NO_BUILD_ISOLATION=1 uv pip install --no-cache \
+        torch torchvision torchaudio \
+        --extra-index-url https://download.pytorch.org/whl/cu128 2>&1 | tee -a "$COMFY_LOG"
 
-    log_info "Installing ComfyUI Python requirements..."
-    uv pip install --no-cache -r requirements.txt 2>&1 | tee -a "$COMFY_LOG"
 
-    log_info "Installing SageAttention 2.2.0 prebuilt wheel..."
-    uv pip install https://huggingface.co/Kijai/PrecompiledWheels/resolve/main/sageattention-2.2.0-cp312-cp312-linux_x86_64.whl 2>&1 | tee -a "$COMFY_LOG"
+    # log_info "Installing ComfyUI Python requirements..."
+    # uv pip install --no-cache -r requirements.txt 2>&1 | tee -a "$COMFY_LOG"
+
+    UV_PREFER_BINARY=1 PIP_ONLY_BINARY="${PIP_ONLY_BINARY}" PIP_NO_BUILD_ISOLATION=1 \
+      uv pip install --no-cache -r requirements.txt 2>&1 | tee -a "$COMFY_LOG"
+
+
+
+    # log_info "Installing SageAttention 2.2.0 prebuilt wheel..."
+    # uv pip install https://huggingface.co/Kijai/PrecompiledWheels/resolve/main/sageattention-2.2.0-cp312-cp312-linux_x86_64.whl 2>&1 | tee -a "$COMFY_LOG"
+    UV_PREFER_BINARY=1 PIP_NO_BUILD_ISOLATION=1 \
+      uv pip install https://huggingface.co/Kijai/PrecompiledWheels/resolve/main/sageattention-2.2.0-cp312-cp312-linux_x86_64.whl 2>&1 | tee -a "$COMFY_LOG"
     popd >/dev/null
 }
 
@@ -316,7 +335,11 @@ install_custom_nodes_dependencies() {
     log_info "Installing custom node requirements..."
     find "$CUSTOM_NODES_DIR" -name "requirements.txt" -print0 | while IFS= read -r -d '' req_file; do
         log_info "Installing dependencies from ${req_file}..."
-        uv pip install --no-cache -r "$req_file" 2>&1 | tee -a "$COMFY_LOG"
+
+        # uv pip install --no-cache -r "$req_file" 2>&1 | tee -a "$COMFY_LOG"
+        UV_PREFER_BINARY=1 PIP_ONLY_BINARY="${PIP_ONLY_BINARY}" PIP_NO_BUILD_ISOLATION=1 \
+          uv pip install --no-cache -r "$req_file" 2>&1 | tee -a "$COMFY_LOG"
+
     done
 }
 

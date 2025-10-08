@@ -11,7 +11,6 @@ Example nodes:
 - "https://github.com/kijai/ComfyUI-KJNodes.git|ComfyUI-KJNodes"
 - "https://github.com/city96/ComfyUI-GGUF.git|ComfyUI-GGUF"
 - "https://github.com/rgthree/rgthree-comfy.git|rgthree-comfy"
-- "https://github.com/justUmen/Bjornulf_custom_nodes.git|Bjornulf_custom_nodes"
 - "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|ComfyUI-Custom-Scripts"
 - "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git|ComfyUI-Frame-Interpolation"
 

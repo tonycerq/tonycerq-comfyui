@@ -46,3 +46,6 @@ ComfyUI/input/*
 Thumbs.db 
 build_and_run.sh
 .env
+
+custom_models_config.json
+civitai-downloader.sh
