@@ -13,9 +13,7 @@ logging.getLogger().handlers = []
 # Set up logging to file only, since stdout is already captured by tee in start.sh
 log_file_path = "/workspace/logs/comfyui.log"
 file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
-file_handler.setFormatter(
-    logging.Formatter("%(message)s")
-)
+file_handler.setFormatter(logging.Formatter("%(message)s"))
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -23,9 +21,7 @@ logger.addHandler(file_handler)
 
 # Also log to stdout for visibility
 stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setFormatter(
-    logging.Formatter("%(message)s")
-)
+stdout_handler.setFormatter(logging.Formatter("%(message)s"))
 logger.addHandler(stdout_handler)
 
 # Global semaphore to limit concurrent downloads
@@ -168,9 +164,9 @@ async def download_category_models(
     )
 
     # Execute downloads concurrently with progress tracking
-    
+
     tasks = []
-    
+
     for i, (task, filename) in enumerate(download_tasks):
         t = asyncio.create_task(
             track_download_progress(
@@ -178,7 +174,7 @@ async def download_category_models(
             )
         )
         tasks.append(t)
-        
+
     return tasks
 
 
@@ -217,8 +213,10 @@ async def main():
         return
 
     # Check if ComfyUI is fully set up
-    comfyui_path = "/workspace/ComfyUI"
-    if not os.path.exists(os.path.join(comfyui_path, "main.py")) and (not force_download):
+    comfyui_path = "/workspace/comfyui"
+    if not os.path.exists(os.path.join(comfyui_path, "main.py")) and (
+        not force_download
+    ):
         logger.info(
             "ComfyUI main.py not found. Skipping model downloads until ComfyUI is installed."
         )
@@ -239,7 +237,7 @@ async def main():
             return
 
     # Base path for ComfyUI
-    base_path = Path("/workspace/ComfyUI")
+    base_path = Path("/workspace/comfyui")
 
     # Ensure directories exist
     ensure_directories(base_path)
@@ -288,7 +286,9 @@ async def main():
     category_tasks = []
     for category, urls in config.items():
         if isinstance(urls, list) and urls:
-            tasks = await download_category_models(category, urls, base_path, force_download)
+            tasks = await download_category_models(
+                category, urls, base_path, force_download
+            )
             [category_tasks.append(task) for task in tasks]
 
     if category_tasks:

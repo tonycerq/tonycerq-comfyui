@@ -2,6 +2,8 @@ import os
 import sys
 from urllib.parse import urlparse
 
+COMFYUI_DIR = "/workspace/comfyui"
+
 
 def check_model_exists(url):
     """Check if a model file exists in ComfyUI models directories"""
@@ -11,7 +13,7 @@ def check_model_exists(url):
             return False
         
         # Search in all model directories
-        models_base = "/workspace/ComfyUI/models"
+        models_base = f"{COMFYUI_DIR}/models"
         if not os.path.exists(models_base):
             return False
             
@@ -108,7 +110,7 @@ def get_installed_models():
             return {}
 
         # Check if ComfyUI/models directory exists before trying to check file existence
-        comfyui_models_dir = "/workspace/ComfyUI/models"
+        comfyui_models_dir = f"{COMFYUI_DIR}/models"
         if not os.path.exists(comfyui_models_dir):
             print(
                 f"Note: {comfyui_models_dir} doesn't exist yet. Will show models from config only."
@@ -126,7 +128,7 @@ def get_installed_models():
                     model_files.append(
                         {
                             "name": filename,
-                            "path": f"/workspace/ComfyUI/models/{category}/{filename}",
+                            "path": f"{COMFYUI_DIR}/models/{category}/{filename}",
                             "url": url,
                         }
                     )

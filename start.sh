@@ -3,12 +3,11 @@
 set -euo pipefail
 
 # Default environment variables
-export UPDATE_ON_START="${UPDATE_ON_START:-false}"
 export MODELS_CONFIG_URL="${MODELS_CONFIG_URL:-https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/models_config.json}"
+export SKIP_CUSTOM_NODES_DOWNLOAD="${SKIP_CUSTOM_NODES_DOWNLOAD:-true}"
 export SKIP_MODEL_DOWNLOAD="${SKIP_MODEL_DOWNLOAD:-false}"
 export LOG_PATH="${LOG_PATH:-/notebooks/backend.log}"
 export USE_SAGE_ATTENTION="${USE_SAGE_ATTENTION:-false}"
-
 export TORCH_FORCE_WEIGHTS_ONLY_LOAD=1
 
 # CUDA environment configuration
@@ -20,7 +19,7 @@ export CUDA_LAUNCH_BLOCKING=1
 export PATH="${HOME}/.cargo/bin:${PATH}"
 
 readonly WORKSPACE_DIR="/workspace"
-readonly COMFY_DIR="${WORKSPACE_DIR}/ComfyUI"
+readonly COMFY_DIR="${WORKSPACE_DIR}/comfyui"
 readonly CUSTOM_NODES_DIR="${COMFY_DIR}/custom_nodes"
 readonly LOG_DIR="${WORKSPACE_DIR}/logs"
 readonly COMFY_LOG="${LOG_DIR}/comfyui.log"
@@ -95,14 +94,22 @@ start_log_viewer() {
 check_internet() {
     local max_attempts=5
     local attempt=1
+    local targets=()
     local timeout=5
+
+    if [[ -n "$MODELS_CONFIG_URL" ]]; then
+        targets+=("$MODELS_CONFIG_URL")
+    fi
+    targets+=("https://raw.githubusercontent.com" "https://example.com" "https://1.1.1.1")
 
     while (( attempt <= max_attempts )); do
         log_info "Checking internet connectivity (${attempt}/${max_attempts})..."
-        if ping -c 1 -W "$timeout" 8.8.8.8 >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 10
+        for target in "${targets[@]}"; do
+            if curl --head --silent --fail --max-time "$timeout" "$target" >/dev/null; then
+                return 0
+            fi
+        done
+        sleep 5
         ((attempt++))
     done
 
@@ -314,6 +321,11 @@ install_custom_nodes_dependencies() {
 
 sync_custom_nodes() {
     ensure_comfyui_structure
+
+    if [[ $SKIP_CUSTOM_NODES_DOWNLOAD == "true" ]]; then
+        log_info "Skipping custom node dependency installation as per configuration."
+        return
+    fi
 
     if [[ "$HAS_INTERNET" -eq 0 ]]; then
         log_warn "Skipping custom node clones (offline mode)."

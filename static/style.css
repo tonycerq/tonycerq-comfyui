@@ -1,15 +1,15 @@
 :root {
-  --primary: #2563eb;
-  --success: #10b981;
+  --primary: #3b82f6;
+  --success: #22c55e;
   --orange: #f59e0b;
-  --primary_disabled: #789be7;
-  --bg: #f9fafb;
-  --card: #fff;
-  --text: #222;
-  --muted: #6b7280;
-  --border: #e5e7eb;
+  --primary_disabled: #1d4ed8;
+  --bg: #0b0f19;
+  --card: #111827;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --border: #1f2937;
   --radius: 10px;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow: 0 16px 40px rgba(2, 6, 23, 0.6);
 }
 body {
   font-family: "Inter", system-ui, sans-serif;
@@ -25,6 +25,7 @@ body {
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  border: 1px solid var(--border);
 }
 .banner {
   width: 100%;
@@ -67,11 +68,10 @@ header {
 }
 .button:disabled {
   background: var(--primary_disabled);
-  
   cursor: not-allowed;
 }
 .button.secondary {
-  background: #f3f4f6;
+  background: #1f2937;
   color: var(--text);
   border: 1px solid var(--border);
 }
@@ -89,7 +89,7 @@ header {
   background: #1e40af;
 }
 .button.success:active:enabled {
-  background: #059669;
+  background: #15803d;
 }
 .button.orange:active:enabled {
   background: #d97706;
@@ -106,12 +106,12 @@ header {
   align-items: center;
 }
 .log-box {
-  background: #0f1116;
+  background: #0f172a;
   border-radius: var(--radius);
   padding: 18px;
   font-family: "Fira Mono", "Consolas", monospace;
   font-size: 0.98rem;
-  color: #d3d7de;
+  color: #cbd5f5;
   min-height: 220px;
   max-height: 350px;
   overflow-y: auto;
@@ -171,7 +171,7 @@ header {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
+  background-color: #374151;
   transition: 0.3s;
   border-radius: 20px;
 }
@@ -182,7 +182,7 @@ header {
   width: 16px;
   left: 2px;
   bottom: 2px;
-  background-color: white;
+  background-color: var(--bg);
   transition: 0.3s;
   border-radius: 50%;
 }
@@ -195,7 +195,7 @@ input:checked + .toggle-slider:before {
 .downloaders {
   display: flex;
   flex-direction: column;
-  background: #f3f4f6;
+  background: #111c2f;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   border: 1px solid var(--border);
@@ -228,7 +228,8 @@ input:checked + .toggle-slider:before {
   border-radius: 6px;
   text-indent: 7px;
   font-size: 1rem;
-  background: #fff;
+  background: #0f172a;
+  color: var(--text);
   -webkit-box-sizing: border-box;
   -moz-box-sizing: border-box;
   box-sizing: border-box;
@@ -238,7 +239,7 @@ input:checked + .toggle-slider:before {
 }
 .tabs {
   display: flex;
-  background: #e5e7eb;
+  background: #101928;
   border-bottom: 1px solid var(--border);
 }
 .tab {
@@ -250,14 +251,17 @@ input:checked + .toggle-slider:before {
   text-align: center;
   flex: 1;
   border-right: 1px solid var(--border);
+  background: #1f2937;
+  color: var(--muted);
 }
 .tab:last-child {
   border-right: none;
 }
 .tab.active {
-  background: #f3f4f6;
+  background: #243046;
   border-bottom: 2px solid var(--primary);
   margin-bottom: -1px;
+  color: var(--text);
 }
 .status-message {
   margin-top: 10px;
@@ -267,18 +271,18 @@ input:checked + .toggle-slider:before {
   display: none;
 }
 .status-success {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
   display: block;
 }
 .status-error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
   display: block;
   white-space: pre-line;
 }
 .collapsible {
-  background: #f3f4f6;
+  background: #111c2f;
   border-radius: var(--radius);
   margin-bottom: 16px;
   border: 1px solid var(--border);
@@ -291,7 +295,7 @@ input:checked + .toggle-slider:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #f9fafb;
+  background: #0f172a;
 }
 .collapsible-content {
   padding: 0;
@@ -315,6 +319,7 @@ input:checked + .toggle-slider:before {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
+  color: var(--text);
 }
 .model-list li:last-child,
 .node-list li:last-child {
@@ -325,6 +330,7 @@ input:checked + .toggle-slider:before {
   margin: 12px 0 8px 0;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 .toggle-icon {
   transition: transform 0.3s ease;
