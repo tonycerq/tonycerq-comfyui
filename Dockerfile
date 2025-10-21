@@ -16,21 +16,21 @@ ENV JUPYTER_PORT=8888 HOST=0.0.0.0
 # --- 1. INSTALLATION AND CONFIGURATION ---
 
 # Install system dependencies including CUDA development tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt update && apt install -y --no-install-recommends \
   software-properties-common git build-essential \
   libgl1-mesa-dev libgl1 \
   libglib2.0-0 libglib2.0-dev libffi-dev \
   wget curl ffmpeg aria2 rsync ca-certificates \
   fzf ripgrep fd-find bat nvtop btop jq httpie tree gnupg \
-  neovim zoxide nmap eza lsof \
+  neovim zoxide nmap lsof eza \
   pkg-config libcairo2-dev meson ninja-build \
   libjpeg-dev zlib1g-dev libfreetype6-dev libpng-dev \
   && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update --yes && \
-    apt-get install --yes --no-install-recommends "python${PYTHON_VERSION}" "python${PYTHON_VERSION}-venv" && \
-    apt-get autoremove -y && \
-    apt-get clean && \
+RUN apt update --yes && \
+    apt install --yes --no-install-recommends "python${PYTHON_VERSION}" "python${PYTHON_VERSION}-venv" && \
+    apt autoremove -y && \
+    apt clean && \
     rm -rf /var/lib/apt/lists/* && \
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 
