@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Default environment variables
-export MODELS_CONFIG_URL="${MODELS_CONFIG_URL:-https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/models_config.json}"
+export MODELS_CONFIG_URL="${MODELS_CONFIG_URL:-https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/config/models_config.json}"
 export SKIP_CUSTOM_NODES_DOWNLOAD="${SKIP_CUSTOM_NODES_DOWNLOAD:-false}"
 export SKIP_MODEL_DOWNLOAD="${SKIP_MODEL_DOWNLOAD:-true}"
 export LOG_PATH="${LOG_PATH:-/notebooks/backend.log}"
@@ -34,7 +34,10 @@ readonly DASHBOARD_WORKDIR="/notebooks"
 readonly DASHBOARD_SCRIPT_PATH="${DASHBOARD_WORKDIR}/web/dashboard.py"
 readonly DASHBOARD_MODULE="web.dashboard"
 readonly DOWNLOAD_MODELS_SCRIPT="${DASHBOARD_WORKDIR}/download_models.py"
-readonly COMFY_MANAGER_CONFIG_URL="https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini"
+
+# readonly COMFY_MANAGER_CONFIG_URL="https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini"
+readonly COMFY_MANAGER_CONFIG_URL="https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/config/comfyui-manager-config.ini"
+
 
 readonly -a CUSTOM_NODE_REPOS=(
   "https://github.com/ltdrdata/ComfyUI-Manager.git|ComfyUI-Manager"

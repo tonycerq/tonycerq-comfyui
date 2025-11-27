@@ -49,3 +49,5 @@ build_and_run.sh
 
 custom_models_config.json
 civitai-downloader.sh
+
+notebooks/captions
