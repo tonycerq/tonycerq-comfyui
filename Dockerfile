@@ -113,7 +113,8 @@ COPY ./web/ ./web/
 
 RUN ls -la
 
-COPY models_config.json /workspace
+COPY config/models_config.json /workspace
+COPY civitai.py /workspace
 
 # JupyterLab theme settings
 RUN mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
