@@ -35,7 +35,8 @@ readonly DASHBOARD_SCRIPT_PATH="${DASHBOARD_WORKDIR}/web/dashboard.py"
 readonly DASHBOARD_MODULE="web.dashboard"
 readonly DOWNLOAD_MODELS_SCRIPT="${DASHBOARD_WORKDIR}/download_models.py"
 
-# readonly COMFY_MANAGER_CONFIG_URL="https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini"
+# Original Url: 
+# https://gist.githubusercontent.com/vjumpkung/b2993de3524b786673552f7de7490b08/raw/b7ae0b4fe0dad5c930ee290f600202f5a6c70fa8/uv_enabled_config.ini
 readonly COMFY_MANAGER_CONFIG_URL="https://raw.githubusercontent.com/tonycerq/tonycerq-comfyui/refs/heads/main/config/comfyui-manager-config.ini"
 
 

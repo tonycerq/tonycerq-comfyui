@@ -51,3 +51,5 @@ custom_models_config.json
 civitai-downloader.sh
 
 notebooks/captions
+
+config/_*

@@ -12,9 +12,12 @@ from urllib.parse import urlparse, parse_qs, unquote
 CHUNK_SIZE = 1638400
 TOKEN_FILE = Path.home() / '.civitai' / 'config'
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-DEFAULT_ENV_NAME = os.getenv("CIVITAI_TOKEN_NAME", "CIVITAI_TOKEN")
+CIVITAI_TOKEN = os.getenv("CIVITAI_API_TOKEN")
 CIVITAI_BASE_URL = 'https://civitai.com/api/download/models'
 
+
+print("CivitAI Downloader Script by rfzee")
+print("Using Token:", CIVITAI_TOKEN)
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -37,7 +40,7 @@ def get_args():
 
 
 def get_token():
-    token = os.getenv(DEFAULT_ENV_NAME, None)
+    token = CIVITAI_TOKEN
     if token:
         return token
     try:
